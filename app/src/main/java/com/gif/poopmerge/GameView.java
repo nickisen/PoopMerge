@@ -159,6 +159,38 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
     }
 
     // Überprüft Kollisionen und führt Kothaufen zusammen
+    // Zeichnet alles auf die Leinwand
+
+    @Override
+    public void draw(Canvas canvas) {
+        super.draw(canvas);
+        if (canvas != null) {
+            canvas.drawColor(Color.parseColor("#ADD8E6")); // Hellblauer Hintergrund
+
+            // Zeichne den Topf
+            canvas.drawRect(containerRect, containerPaint);
+
+            // Zeichne alle platzierten Kothaufen
+            for (Poop poop : placedPoops) {
+                poop.draw(canvas);
+            }
+            // Partikel zeichnen
+            for (Particle p : particles) {
+                p.draw(canvas);
+            }
+
+
+            // Zeichne den nächsten fallenden Kothaufen, wenn er aktiv ist
+            if (fallingPoop != null) {
+                fallingPoop.draw(canvas);
+            }
+
+            // Zeichne den Punktestand
+            canvas.drawText("Score: " + score, getWidth() / 2, 100, scorePaint);
+            canvas.drawText("High: " + highScore, getWidth() / 2, 180, scorePaint);
+        }
+    }
+    // Überprüft Kollisionen und führt Kothaufen zusammen
     private void checkCollisionsAndMerge() {
         // Erzeuge eine temporäre Liste für zu entfernende Poops und neue Poops
         List<Poop> poopsToRemove = new ArrayList<>();
@@ -195,7 +227,6 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
                             particles.add(new Particle(newX, newY));
                         }
 
-
                         Poop newPoop = new Poop(newType, poopImages[newType], newX, newY);
                         poopsToAdd.add(newPoop);
 
@@ -205,28 +236,49 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
                             saveHighScore();
                         }
                     } else {
-                        // Physikalische Abstoßung (Kreis-Kollision mit Impulsübertragung)
-                        float angle = (float) Math.atan2(dy, dx);
+                        // =================================================================== //
+                        // NEUE, VERBESSERTE PHYSIK-LOGIK FÜR STABILES STAPELN
+                        // =================================================================== //
+
+                        // Schritt 1: Positionskorrektur, um Überlappung zu beheben
                         float overlap = minDistance - distance;
+                        float nx = dx / distance; // Normalisierter Vektor x
+                        float ny = dy / distance; // Normalisierter Vektor y
 
-                        // Poops verschieben, um Überlappung zu vermeiden (Stapeln)
-                        float moveX = overlap * (dx / distance);
-                        float moveY = overlap * (dy / distance);
-                        p1.x -= moveX / 2;
-                        p1.y -= moveY / 2;
-                        p2.x += moveX / 2;
-                        p2.y += moveY / 2;
+                        // Bewege beide Objekte um die Hälfte der Überlappung auseinander
+                        p1.x -= overlap / 2 * nx;
+                        p1.y -= overlap / 2 * ny;
+                        p2.x += overlap / 2 * nx;
+                        p2.y += overlap / 2 * ny;
 
+                        // Schritt 2: Physikalische Reaktion (Abprallen/Impuls)
+                        // Relative Geschwindigkeit
+                        float relVelX = p1.velocityX - p2.velocityX;
+                        float relVelY = p1.velocityY - p2.velocityY;
 
-                        float targetX = p1.x + (float) Math.cos(angle) * minDistance;
-                        float targetY = p1.y + (float) Math.sin(angle) * minDistance;
-                        float ax = (targetX - p2.x) * 0.1f; // Stoßkraft
-                        float ay = (targetY - p2.y) * 0.1f;
+                        // Geschwindigkeit entlang der Kollisionsnormalen
+                        float velAlongNormal = relVelX * nx + relVelY * ny;
 
-                        p1.setVelocityX(p1.getVelocityX() - ax);
-                        p1.setVelocityY(p1.getVelocityY() - ay);
-                        p2.setVelocityX(p2.getVelocityX() + ax);
-                        p2.setVelocityY(p2.getVelocityY() + ay);
+                        // Nichts tun, wenn sich die Objekte bereits voneinander entfernen
+                        if (velAlongNormal > 0) {
+                            continue;
+                        }
+
+                        // "Restitution" (Sprungkraft). Ein niedriger Wert sorgt für sanftes Stapeln.
+                        float restitution = 0.1f;
+
+                        // Impuls berechnen
+                        float impulse = -(1 + restitution) * velAlongNormal;
+                        impulse /= 2; // Annahme: gleiche Masse für beide Poops
+
+                        // Impuls anwenden, um die Geschwindigkeiten zu ändern
+                        float impulseX = impulse * nx;
+                        float impulseY = impulse * ny;
+
+                        p1.velocityX += impulseX;
+                        p1.velocityY += impulseY;
+                        p2.velocityX -= impulseX;
+                        p2.velocityY -= impulseY;
                     }
                 }
             }
@@ -235,37 +287,6 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         // Führe die Änderungen aus (Poops entfernen und hinzufügen)
         placedPoops.removeAll(poopsToRemove);
         placedPoops.addAll(poopsToAdd);
-    }
-
-    // Zeichnet alles auf die Leinwand
-    @Override
-    public void draw(Canvas canvas) {
-        super.draw(canvas);
-        if (canvas != null) {
-            canvas.drawColor(Color.parseColor("#ADD8E6")); // Hellblauer Hintergrund
-
-            // Zeichne den Topf
-            canvas.drawRect(containerRect, containerPaint);
-
-            // Zeichne alle platzierten Kothaufen
-            for (Poop poop : placedPoops) {
-                poop.draw(canvas);
-            }
-            // Partikel zeichnen
-            for (Particle p : particles) {
-                p.draw(canvas);
-            }
-
-
-            // Zeichne den nächsten fallenden Kothaufen, wenn er aktiv ist
-            if (fallingPoop != null) {
-                fallingPoop.draw(canvas);
-            }
-
-            // Zeichne den Punktestand
-            canvas.drawText("Score: " + score, getWidth() / 2, 100, scorePaint);
-            canvas.drawText("High: " + highScore, getWidth() / 2, 180, scorePaint);
-        }
     }
 
     // Behandelt Touch-Eingaben
