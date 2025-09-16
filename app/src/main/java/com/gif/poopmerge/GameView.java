@@ -30,6 +30,8 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
     private RectF containerRect; // Rechteck für den Spielbehälter (Topf)
 
     private boolean isDropping = false; // Steuert, ob der aktuelle Kothaufen fällt
+    private List<Particle> particles = new ArrayList<>();
+
 
     public GameView(Context context) {
         super(context);
@@ -120,6 +122,17 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
             poop.update();
         }
 
+        // Partikel aktualisieren und entfernen
+        Iterator<Particle> iterator = particles.iterator();
+        while (iterator.hasNext()) {
+            Particle p = iterator.next();
+            p.update();
+            if (!p.isAlive()) {
+                iterator.remove();
+            }
+        }
+
+
         // Wende Physik und Kollisionen an
         applyPhysics();
         checkCollisionsAndMerge();
@@ -177,6 +190,12 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
                         float newX = (p1.x + p2.x) / 2;
                         float newY = (p1.y + p2.y) / 2;
 
+                        // Partikeleffekt erzeugen
+                        for (int k = 0; k < 20; k++) {
+                            particles.add(new Particle(newX, newY));
+                        }
+
+
                         Poop newPoop = new Poop(newType, poopImages[newType], newX, newY);
                         poopsToAdd.add(newPoop);
 
@@ -188,6 +207,17 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
                     } else {
                         // Physikalische Abstoßung (Kreis-Kollision mit Impulsübertragung)
                         float angle = (float) Math.atan2(dy, dx);
+                        float overlap = minDistance - distance;
+
+                        // Poops verschieben, um Überlappung zu vermeiden (Stapeln)
+                        float moveX = overlap * (dx / distance);
+                        float moveY = overlap * (dy / distance);
+                        p1.x -= moveX / 2;
+                        p1.y -= moveY / 2;
+                        p2.x += moveX / 2;
+                        p2.y += moveY / 2;
+
+
                         float targetX = p1.x + (float) Math.cos(angle) * minDistance;
                         float targetY = p1.y + (float) Math.sin(angle) * minDistance;
                         float ax = (targetX - p2.x) * 0.1f; // Stoßkraft
@@ -221,6 +251,11 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
             for (Poop poop : placedPoops) {
                 poop.draw(canvas);
             }
+            // Partikel zeichnen
+            for (Particle p : particles) {
+                p.draw(canvas);
+            }
+
 
             // Zeichne den nächsten fallenden Kothaufen, wenn er aktiv ist
             if (fallingPoop != null) {
