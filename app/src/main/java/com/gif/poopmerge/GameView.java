@@ -27,7 +27,9 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
     private int score = 0;
     private int highScore;
     private final Paint scorePaint;
-    private final Paint containerPaint;
+    private final Paint toiletPaint; // Neuer Paint für die Toilette
+    private final Paint toiletContourPaint; // Neuer Paint für die Toilettenkontur
+
     private RectF containerRect; // Rechteck für den Spielbehälter (Topf)
 
     private boolean isDropping = false; // Steuert, ob der aktuelle Kothaufen fällt
@@ -41,7 +43,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
 
         // --- VERÄNDERT: Lade die Kothaufen-Bilder und skaliere sie ---
         // Jede neue Stufe wird um 25% größer.
-        float baseSize = 75; // Startgröße für poop_1 (vorher 60, jetzt 25% größer)
+        float baseSize = 150; // Startgröße für poop_1 (vorher 75, jetzt verdoppelt)
         float scaleFactor = 1.25f; // Jede Evolution ist 25% größer als die vorherige
 
         // Schleife auf 10 Bilder erweitert
@@ -66,25 +68,30 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         scorePaint.setTextSize(60);
         scorePaint.setTextAlign(Paint.Align.CENTER);
 
-        containerPaint = new Paint();
-        containerPaint.setColor(Color.parseColor("#8B4513")); // Braun für den Topf
-        containerPaint.setStyle(Paint.Style.STROKE);
-        containerPaint.setStrokeWidth(20);
+        // Neuer Paint für die Toilette
+        toiletPaint = new Paint();
+        toiletPaint.setColor(Color.WHITE); // Weiße Toilettenschüssel
+        toiletPaint.setStyle(Paint.Style.FILL);
+
+        toiletContourPaint = new Paint();
+        toiletContourPaint.setColor(Color.GRAY); // Grauer Rand
+        toiletContourPaint.setStyle(Paint.Style.STROKE);
+        toiletContourPaint.setStrokeWidth(30); // Dickere Kontur
+
 
         gameThread = new GameThread(getHolder(), this);
     }
 
     @Override
     public void surfaceCreated(SurfaceHolder holder) {
-        // Initialisiere den Behälter, wenn die Oberfläche erstellt wird
-        int containerWidth = getWidth() * 8 / 10;
+        // Container an die Bildschirmränder anpassen
+        int containerWidth = getWidth(); // Volle Breite
         int containerHeight = getHeight() * 7 / 10;
-        int left = (getWidth() - containerWidth) / 2;
+        int left = 0; // Startet am linken Rand
         int top = getHeight() - containerHeight;
         containerRect = new RectF(left, top, left + containerWidth, top + containerHeight);
 
-        // Erzeuge den ersten Kothaufen, aber lasse ihn nicht sofort fallen
-        spawnNewPoop(getWidth() / 2.0f); // Positioniere in der Mitte oben
+        spawnNewPoop(getWidth() / 2.0f);
         gameThread.setRunning(true);
         gameThread.start();
     }
@@ -102,26 +109,21 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         }
     }
 
-    // Aktualisiert den Spielzustand mit Physik
     public void update() {
-        // Aktualisiere den fallenden Kothaufen, wenn er aktiv ist
         if (fallingPoop != null && isDropping) {
             fallingPoop.update();
-            // Kollision des fallenden Kothaufens mit dem Boden des Topfes
             if (fallingPoop.y + fallingPoop.radius > containerRect.bottom) {
                 fallingPoop.y = containerRect.bottom - fallingPoop.radius;
                 fallingPoop.setVelocityY(0);
-                fallingPoop.setVelocityX(0); // Auch horizontale Geschwindigkeit stoppen
+                fallingPoop.setVelocityX(0);
                 placeFallingPoop();
             }
         }
 
-        // Aktualisiere alle platzierten Kothaufen
         for (Poop poop : placedPoops) {
             poop.update();
         }
 
-        // Partikel aktualisieren und entfernen
         Iterator<Particle> iterator = particles.iterator();
         while (iterator.hasNext()) {
             Particle p = iterator.next();
@@ -131,67 +133,57 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
             }
         }
 
-
-        // Wende Physik und Kollisionen an
         applyPhysics();
         checkCollisionsAndMerge();
     }
 
-    // Wendet Physik auf alle Kothaufen im Topf an
     private void applyPhysics() {
         for (Poop poop : placedPoops) {
-            // Begrenzungen des Topfes
-            if (poop.x - poop.radius < containerRect.left) {
-                poop.x = containerRect.left + poop.radius;
-                poop.setVelocityX(Math.abs(poop.getVelocityX()) * 0.8f); // Abprallen von der Wand
+            // Kollision mit den Innenwänden des Containers
+            float wallThickness = toiletContourPaint.getStrokeWidth() / 2;
+            if (poop.x - poop.radius < containerRect.left + wallThickness) {
+                poop.x = containerRect.left + wallThickness + poop.radius;
+                poop.setVelocityX(Math.abs(poop.getVelocityX()) * 0.8f);
             }
-            if (poop.x + poop.radius > containerRect.right) {
-                poop.x = containerRect.right - poop.radius;
-                poop.setVelocityX(-Math.abs(poop.getVelocityX()) * 0.8f); // Abprallen von der Wand
+            if (poop.x + poop.radius > containerRect.right - wallThickness) {
+                poop.x = containerRect.right - wallThickness - poop.radius;
+                poop.setVelocityX(-Math.abs(poop.getVelocityX()) * 0.8f);
             }
-            if (poop.y + poop.radius > containerRect.bottom) {
-                poop.y = containerRect.bottom - poop.radius;
-                poop.setVelocityY(-Math.abs(poop.getVelocityY()) * 0.5f); // Abprallen vom Boden
-                poop.setVelocityX(poop.getVelocityX() * 0.8f); // Auch Reibung am Boden
+            if (poop.y + poop.radius > containerRect.bottom - wallThickness) {
+                poop.y = containerRect.bottom - wallThickness - poop.radius;
+                poop.setVelocityY(-Math.abs(poop.getVelocityY()) * 0.5f);
+                poop.setVelocityX(poop.getVelocityX() * 0.8f);
             }
         }
     }
-
-    // Überprüft Kollisionen und führt Kothaufen zusammen
-    // Zeichnet alles auf die Leinwand
 
     @Override
     public void draw(Canvas canvas) {
         super.draw(canvas);
         if (canvas != null) {
-            canvas.drawColor(Color.parseColor("#ADD8E6")); // Hellblauer Hintergrund
+            canvas.drawColor(Color.parseColor("#ADD8E6"));
 
-            // Zeichne den Topf
-            canvas.drawRect(containerRect, containerPaint);
+            // Zeichne die Toilette
+            canvas.drawRect(containerRect, toiletPaint);
+            canvas.drawRect(containerRect, toiletContourPaint);
 
-            // Zeichne alle platzierten Kothaufen
             for (Poop poop : placedPoops) {
                 poop.draw(canvas);
             }
-            // Partikel zeichnen
             for (Particle p : particles) {
                 p.draw(canvas);
             }
 
-
-            // Zeichne den nächsten fallenden Kothaufen, wenn er aktiv ist
             if (fallingPoop != null) {
                 fallingPoop.draw(canvas);
             }
 
-            // Zeichne den Punktestand
             canvas.drawText("Score: " + score, getWidth() / 2, 100, scorePaint);
             canvas.drawText("High: " + highScore, getWidth() / 2, 180, scorePaint);
         }
     }
-    // Überprüft Kollisionen und führt Kothaufen zusammen
+
     private void checkCollisionsAndMerge() {
-        // Erzeuge eine temporäre Liste für zu entfernende Poops und neue Poops
         List<Poop> poopsToRemove = new ArrayList<>();
         List<Poop> poopsToAdd = new ArrayList<>();
 
@@ -200,7 +192,6 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
                 Poop p1 = placedPoops.get(i);
                 Poop p2 = placedPoops.get(j);
 
-                // Wenn bereits zum Entfernen markiert, überspringen
                 if (poopsToRemove.contains(p1) || poopsToRemove.contains(p2)) continue;
 
                 float dx = p2.x - p1.x;
@@ -209,12 +200,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
                 float minDistance = p1.radius + p2.radius;
 
                 if (distance < minDistance) {
-                    // Kollision erkannt
-
-                    // --- VERÄNDERT: Bedingung für Merge auf < 9 erhöht ---
-                    // Wenn gleiche Typen und noch nicht die größte Stufe (poop_10, also Typ 9)
                     if (p1.getType() == p2.getType() && p1.getType() < 9) {
-                        // Markiere zum Zusammenführen
                         poopsToRemove.add(p1);
                         poopsToRemove.add(p2);
 
@@ -222,7 +208,6 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
                         float newX = (p1.x + p2.x) / 2;
                         float newY = (p1.y + p2.y) / 2;
 
-                        // Partikeleffekt erzeugen
                         for (int k = 0; k < 20; k++) {
                             particles.add(new Particle(newX, newY));
                         }
@@ -230,38 +215,31 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
                         Poop newPoop = new Poop(newType, poopImages[newType], newX, newY);
                         poopsToAdd.add(newPoop);
 
-                        score += (newType + 1) * 100; // Punkte basierend auf der neuen Stufe
+                        score += (newType + 1) * 100;
                         if (score > highScore) {
                             highScore = score;
                             saveHighScore();
                         }
                     } else {
-                        // =================================================================== //
-                        // PHYSIK-LOGIK FÜR STABILES STAPELN (Positionsbasiert)              //
-                        // =================================================================== //
-
-                        // Schritt 1: Positionskorrektur, um Überlappung zu beheben
                         float overlap = minDistance - distance;
-                        if (distance == 0) distance = 0.1f; // Verhindert Division durch Null
-                        float nx = dx / distance; // Normalisierter Vektor x
-                        float ny = dy / distance; // Normalisierter Vektor y
+                        if (distance == 0) distance = 0.1f;
+                        float nx = dx / distance;
+                        float ny = dy / distance;
 
-                        // Bewege beide Objekte um die Hälfte der Überlappung auseinander
                         p1.x -= overlap / 2 * nx;
                         p1.y -= overlap / 2 * ny;
                         p2.x += overlap / 2 * nx;
                         p2.y += overlap / 2 * ny;
 
-                        // Schritt 2: Physikalische Reaktion (Impuls)
                         float relVelX = p1.getVelocityX() - p2.getVelocityX();
                         float relVelY = p1.getVelocityY() - p2.getVelocityY();
                         float velAlongNormal = relVelX * nx + relVelY * ny;
 
-                        if (velAlongNormal > 0) continue; // Entfernen sich bereits
+                        if (velAlongNormal > 0) continue;
 
-                        float restitution = 0.1f; // Geringe "Sprungkraft"
+                        float restitution = 0.8f; // Erhöhter Abpralleffekt
                         float impulse = -(1 + restitution) * velAlongNormal;
-                        impulse /= 2; // Annahme gleicher Masse
+                        impulse /= 2;
 
                         float impulseX = impulse * nx;
                         float impulseY = impulse * ny;
@@ -275,33 +253,29 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
             }
         }
 
-        // Führe die Änderungen aus (Poops entfernen und hinzufügen)
         placedPoops.removeAll(poopsToRemove);
         placedPoops.addAll(poopsToAdd);
     }
 
-    // Behandelt Touch-Eingaben
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        if (fallingPoop == null) return true; // Nichts zu tun, wenn kein Kothaufen zum Platzieren da ist
+        if (fallingPoop == null) return true;
 
         switch (event.getAction()) {
             case MotionEvent.ACTION_DOWN:
             case MotionEvent.ACTION_MOVE:
-                // Bewege den Kothaufen horizontal mit dem Finger, wenn er noch nicht fällt
                 if (!isDropping) {
                     fallingPoop.setX(event.getX());
-                    // Verhindere, dass der Kothaufen den Topf verlässt
-                    if (fallingPoop.getX() - fallingPoop.getRadius() < containerRect.left) {
-                        fallingPoop.setX(containerRect.left + fallingPoop.getRadius());
+                    float wallThickness = toiletContourPaint.getStrokeWidth() / 2;
+                    if (fallingPoop.getX() - fallingPoop.getRadius() < containerRect.left + wallThickness) {
+                        fallingPoop.setX(containerRect.left + wallThickness + fallingPoop.getRadius());
                     }
-                    if (fallingPoop.getX() + fallingPoop.getRadius() > containerRect.right) {
-                        fallingPoop.setX(containerRect.right - fallingPoop.getRadius());
+                    if (fallingPoop.getX() + fallingPoop.getRadius() > containerRect.right - wallThickness) {
+                        fallingPoop.setX(containerRect.right - wallThickness - fallingPoop.getRadius());
                     }
                 }
                 break;
             case MotionEvent.ACTION_UP:
-                // Lasse den Kothaufen fallen, wenn der Finger losgelassen wird
                 if (!isDropping) {
                     isDropping = true;
                 }
@@ -310,20 +284,18 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         return true;
     }
 
-    // Platziert den fallenden Kothaufen in die Liste der platzierten Kothaufen
     private void placeFallingPoop() {
         if (fallingPoop != null) {
             placedPoops.add(fallingPoop);
-            fallingPoop = null; // Markiere den Kothaufen als platziert
-            isDropping = false; // Zurücksetzen, damit der nächste Kothaufen bewegt werden kann
-            spawnNewPoop(getWidth() / 2.0f); // Erzeuge den nächsten Kothaufen in der Mitte
+            fallingPoop = null;
+            isDropping = false;
+            spawnNewPoop(getWidth() / 2.0f);
         }
     }
 
-    // Erzeugt einen neuen Kothaufen am oberen Rand des Behälters
     private void spawnNewPoop(float initialX) {
-        int type = random.nextInt(3); // Beginne mit den kleinsten Typen (0, 1 oder 2)
-        float startY = containerRect.top - poopImages[type].getHeight(); // Positioniere es über dem Behälter
+        int type = random.nextInt(3);
+        float startY = containerRect.top - poopImages[type].getHeight();
         fallingPoop = new Poop(type, poopImages[type], initialX, startY);
     }
 
