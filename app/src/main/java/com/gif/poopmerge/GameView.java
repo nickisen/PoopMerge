@@ -21,7 +21,8 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
     private GameThread gameThread;
     private List<Poop> placedPoops = new ArrayList<>(); // Platzierten Kothaufen
     private Poop fallingPoop; // Der Kothaufen, der gerade vom Spieler bewegt wird oder fällt
-    private Bitmap[] poopImages = new Bitmap[5];
+    // HINZUGEFÜGT: Array auf 10 Bilder erweitert
+    private Bitmap[] poopImages = new Bitmap[10];
     private final Random random = new Random();
     private int score = 0;
     private int highScore;
@@ -38,24 +39,22 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         getHolder().addCallback(this);
         setFocusable(true);
 
-        // Lade die Kothaufen-Bilder und skaliere sie
-        // poop_1 ist jetzt deutlich kleiner als poop_2
-        float baseSizeSmallest = 60; // Größe für poop_1
-        float scaleFactor = 1.6f; // Skalierungsfaktor für nachfolgende Poops
+        // --- VERÄNDERT: Lade die Kothaufen-Bilder und skaliere sie ---
+        // Jede neue Stufe wird um 25% größer.
+        float baseSize = 75; // Startgröße für poop_1 (vorher 60, jetzt 25% größer)
+        float scaleFactor = 1.25f; // Jede Evolution ist 25% größer als die vorherige
 
-        for (int i = 0; i < 5; i++) {
+        // Schleife auf 10 Bilder erweitert
+        for (int i = 0; i < 10; i++) {
             int resId = getResources().getIdentifier("poop_" + (i + 1), "drawable", context.getPackageName());
             Bitmap original = BitmapFactory.decodeResource(getResources(), resId);
 
-            int width;
-            if (i == 0) { // poop_1
-                width = (int) baseSizeSmallest;
-            } else { // poop_2 bis poop_5
-                width = (int) (baseSizeSmallest * Math.pow(scaleFactor, i));
-            }
+            // Berechne die neue Breite basierend auf der Evolutionsstufe
+            int width = (int) (baseSize * Math.pow(scaleFactor, i));
 
             poopImages[i] = Bitmap.createScaledBitmap(original, width, width, true);
         }
+        // --- ENDE DER ÄNDERUNG ---
 
 
         // Lade den Highscore
@@ -212,8 +211,9 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
                 if (distance < minDistance) {
                     // Kollision erkannt
 
-                    // Wenn gleiche Typen und noch nicht die größte Stufe
-                    if (p1.getType() == p2.getType() && p1.getType() < 4) {
+                    // --- VERÄNDERT: Bedingung für Merge auf < 9 erhöht ---
+                    // Wenn gleiche Typen und noch nicht die größte Stufe (poop_10, also Typ 9)
+                    if (p1.getType() == p2.getType() && p1.getType() < 9) {
                         // Markiere zum Zusammenführen
                         poopsToRemove.add(p1);
                         poopsToRemove.add(p2);
@@ -230,18 +230,19 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
                         Poop newPoop = new Poop(newType, poopImages[newType], newX, newY);
                         poopsToAdd.add(newPoop);
 
-                        score += (newType) * 100; // Höhere Punkte für Verschmelzung
+                        score += (newType + 1) * 100; // Punkte basierend auf der neuen Stufe
                         if (score > highScore) {
                             highScore = score;
                             saveHighScore();
                         }
                     } else {
                         // =================================================================== //
-                        // NEUE LOGIK FÜR STABILES STAPELN (Positionsbasiert)                 //
+                        // PHYSIK-LOGIK FÜR STABILES STAPELN (Positionsbasiert)              //
                         // =================================================================== //
 
                         // Schritt 1: Positionskorrektur, um Überlappung zu beheben
                         float overlap = minDistance - distance;
+                        if (distance == 0) distance = 0.1f; // Verhindert Division durch Null
                         float nx = dx / distance; // Normalisierter Vektor x
                         float ny = dy / distance; // Normalisierter Vektor y
 
@@ -251,35 +252,24 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
                         p2.x += overlap / 2 * nx;
                         p2.y += overlap / 2 * ny;
 
-                        // Schritt 2: Stacking-Verhalten
-                        // Relative Geschwindigkeit
-                        float relVelX = p1.velocityX - p2.velocityX;
-                        float relVelY = p1.velocityY - p2.velocityY;
-
-                        // Geschwindigkeit entlang der Kollisionsnormalen
+                        // Schritt 2: Physikalische Reaktion (Impuls)
+                        float relVelX = p1.getVelocityX() - p2.getVelocityX();
+                        float relVelY = p1.getVelocityY() - p2.getVelocityY();
                         float velAlongNormal = relVelX * nx + relVelY * ny;
 
-                        // Nur reagieren, wenn sich die Objekte aufeinander zubewegen
-                        if (velAlongNormal < 0) {
-                            // Wende eine "Restitution" (Sprungkraft) an, die sehr niedrig ist,
-                            // um ein "Klebenbleiben" zu verhindern, aber das Springen zu minimieren.
-                            float restitution = 0.05f; // Sehr niedriger Wert für sanftes Stapeln
+                        if (velAlongNormal > 0) continue; // Entfernen sich bereits
 
-                            // Impuls berechnen
-                            float impulse = -(1 + restitution) * velAlongNormal;
-                            // Passe die Masse an, falls die Poops unterschiedlich schwer sein sollen
-                            // Hier gehen wir von gleicher Masse aus (impulse /= 2)
-                            impulse /= 2;
+                        float restitution = 0.1f; // Geringe "Sprungkraft"
+                        float impulse = -(1 + restitution) * velAlongNormal;
+                        impulse /= 2; // Annahme gleicher Masse
 
-                            // Impuls anwenden, um die Geschwindigkeiten zu ändern
-                            float impulseX = impulse * nx;
-                            float impulseY = impulse * ny;
+                        float impulseX = impulse * nx;
+                        float impulseY = impulse * ny;
 
-                            p1.velocityX += impulseX;
-                            p1.velocityY += impulseY;
-                            p2.velocityX -= impulseX;
-                            p2.velocityY -= impulseY;
-                        }
+                        p1.setVelocityX(p1.getVelocityX() + impulseX);
+                        p1.setVelocityY(p1.getVelocityY() + impulseY);
+                        p2.setVelocityX(p2.getVelocityX() - impulseX);
+                        p2.setVelocityY(p2.getVelocityY() - impulseY);
                     }
                 }
             }
@@ -314,8 +304,6 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
                 // Lasse den Kothaufen fallen, wenn der Finger losgelassen wird
                 if (!isDropping) {
                     isDropping = true;
-                    // Der Kothaufen beginnt zu fallen
-                    // Die Update-Methode von Poop wird die Schwerkraft anwenden
                 }
                 break;
         }
@@ -334,7 +322,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
 
     // Erzeugt einen neuen Kothaufen am oberen Rand des Behälters
     private void spawnNewPoop(float initialX) {
-        int type = random.nextInt(2); // Beginne mit den kleinsten Typen (0 oder 1)
+        int type = random.nextInt(3); // Beginne mit den kleinsten Typen (0, 1 oder 2)
         float startY = containerRect.top - poopImages[type].getHeight(); // Positioniere es über dem Behälter
         fallingPoop = new Poop(type, poopImages[type], initialX, startY);
     }
