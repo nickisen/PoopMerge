@@ -1,43 +1,61 @@
 package com.gif.poopmerge;
 
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Matrix;
 
 public class Poop {
 
     private int type;
     private Bitmap image;
-    float x, y; // Position (float für genauere Physik)
-    float radius; // Radius für kreisförmige Kollision
-    float velocityX; // Horizontale Geschwindigkeit
-    float velocityY; // Vertikale Geschwindigkeit
-    private static final float GRAVITY = 0.5f; // Schwerkraft
-    private static final float FRICTION = 0.98f; // Reibung der Bewegung
+    float x, y;
+    float radius;
+    float velocityX;
+    float velocityY;
+    private float mass;
+    private float rotation;
+    private float angularVelocity;
+    private static final float GRAVITY = 0.5f;
+    private static final float AIR_FRICTION = 0.99f; // Leichter Luftwiderstand
 
     public Poop(int type, Bitmap image, float x, float y) {
         this.type = type;
         this.image = image;
         this.x = x;
         this.y = y;
-        this.radius = image.getWidth() / 2.0f; // Radius ist die Hälfte der Bildbreite
+        this.radius = image.getWidth() / 2.0f;
         this.velocityX = 0;
         this.velocityY = 0;
+        this.mass = (float) Math.pow(1.6, type);
+        this.rotation = 0;
+        this.angularVelocity = 0;
     }
 
     public void update() {
-        velocityY += GRAVITY; // Schwerkraft anwenden
+        velocityY += GRAVITY;
         x += velocityX;
         y += velocityY;
 
-        // Reibung anwenden, um Bewegungen zu verlangsamen
-        velocityX *= FRICTION;
-        if (Math.abs(velocityX) < 0.1f) {
-            velocityX = 0; // Schwellenwert, um aufzuhören
+        rotation += angularVelocity;
+        // Wende leichten "Luftwiderstand" auf die Drehung an
+        angularVelocity *= AIR_FRICTION;
+
+        // Verlangsame die lineare Bewegung
+        velocityX *= AIR_FRICTION;
+        if (Math.abs(velocityX) < 0.05f) {
+            velocityX = 0;
+        }
+        if (Math.abs(angularVelocity) < 0.05f) {
+            angularVelocity = 0;
         }
     }
 
-    public void draw(android.graphics.Canvas canvas) {
-        // Zeichne das Bild so, dass sein Mittelpunkt (x, y) ist
-        canvas.drawBitmap(image, x - radius, y - radius, null);
+    public void draw(Canvas canvas) {
+        Matrix matrix = new Matrix();
+        matrix.postTranslate(-image.getWidth() / 2.0f, -image.getHeight() / 2.0f);
+        matrix.postRotate(rotation);
+        matrix.postTranslate(x, y);
+        canvas.drawBitmap(image, matrix, null);
     }
 
     // --- Getter und Setter ---
@@ -54,4 +72,8 @@ public class Poop {
     public void setVelocityX(float velocityX) { this.velocityX = velocityX; }
     public float getVelocityY() { return velocityY; }
     public void setVelocityY(float velocityY) { this.velocityY = velocityY; }
+    public float getMass() { return mass; }
+    public float getAngularVelocity() { return angularVelocity; } // NEU: Getter
+    public void setAngularVelocity(float angularVelocity) { this.angularVelocity = angularVelocity; } // NEU: Setter
+    public void addRotation(float rotation) { this.angularVelocity += rotation; }
 }
