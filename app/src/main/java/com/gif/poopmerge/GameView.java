@@ -237,7 +237,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
                         }
                     } else {
                         // =================================================================== //
-                        // NEUE, VERBESSERTE PHYSIK-LOGIK FÜR STABILES STAPELN
+                        // NEUE LOGIK FÜR STABILES STAPELN (Positionsbasiert)                 //
                         // =================================================================== //
 
                         // Schritt 1: Positionskorrektur, um Überlappung zu beheben
@@ -251,7 +251,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
                         p2.x += overlap / 2 * nx;
                         p2.y += overlap / 2 * ny;
 
-                        // Schritt 2: Physikalische Reaktion (Abprallen/Impuls)
+                        // Schritt 2: Stacking-Verhalten
                         // Relative Geschwindigkeit
                         float relVelX = p1.velocityX - p2.velocityX;
                         float relVelY = p1.velocityY - p2.velocityY;
@@ -259,26 +259,27 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
                         // Geschwindigkeit entlang der Kollisionsnormalen
                         float velAlongNormal = relVelX * nx + relVelY * ny;
 
-                        // Nichts tun, wenn sich die Objekte bereits voneinander entfernen
-                        if (velAlongNormal > 0) {
-                            continue;
+                        // Nur reagieren, wenn sich die Objekte aufeinander zubewegen
+                        if (velAlongNormal < 0) {
+                            // Wende eine "Restitution" (Sprungkraft) an, die sehr niedrig ist,
+                            // um ein "Klebenbleiben" zu verhindern, aber das Springen zu minimieren.
+                            float restitution = 0.05f; // Sehr niedriger Wert für sanftes Stapeln
+
+                            // Impuls berechnen
+                            float impulse = -(1 + restitution) * velAlongNormal;
+                            // Passe die Masse an, falls die Poops unterschiedlich schwer sein sollen
+                            // Hier gehen wir von gleicher Masse aus (impulse /= 2)
+                            impulse /= 2;
+
+                            // Impuls anwenden, um die Geschwindigkeiten zu ändern
+                            float impulseX = impulse * nx;
+                            float impulseY = impulse * ny;
+
+                            p1.velocityX += impulseX;
+                            p1.velocityY += impulseY;
+                            p2.velocityX -= impulseX;
+                            p2.velocityY -= impulseY;
                         }
-
-                        // "Restitution" (Sprungkraft). Ein niedriger Wert sorgt für sanftes Stapeln.
-                        float restitution = 0.1f;
-
-                        // Impuls berechnen
-                        float impulse = -(1 + restitution) * velAlongNormal;
-                        impulse /= 2; // Annahme: gleiche Masse für beide Poops
-
-                        // Impuls anwenden, um die Geschwindigkeiten zu ändern
-                        float impulseX = impulse * nx;
-                        float impulseY = impulse * ny;
-
-                        p1.velocityX += impulseX;
-                        p1.velocityY += impulseY;
-                        p2.velocityX -= impulseX;
-                        p2.velocityY -= impulseY;
                     }
                 }
             }
