@@ -1,3 +1,5 @@
+// Pfad: app/src/main/java/com/gif/poopmerge/GameView.java
+
 package com.gif.poopmerge;
 
 import android.content.Context;
@@ -7,6 +9,7 @@ import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.Rect;
 import android.graphics.RectF;
 import android.view.MotionEvent;
 import android.view.SurfaceHolder;
@@ -25,10 +28,16 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
     private final Random random = new Random();
     private int score = 0;
     private int highScore;
+
+    // --- NEUE UND GEÄNDERTE VARIABLEN FÜR DAS DESIGN ---
     private final Paint scorePaint;
-    private final Paint toiletPaint;
-    private final Paint toiletContourPaint;
+    private final Paint scoreBackgroundPaint; // Für den Kachel-Hintergrund der Punkte
+    private final Paint toiletBowlPaint;      // Für das "Wasser" in der Schüssel
+    private final Paint toiletRimPaint;       // Für den Porzellanrand
     private RectF containerRect;
+    private RectF scoreBgRect;                // Rechteck für den Punkte-Hintergrund
+    private Bitmap backgroundBitmap;          // Unser neues Kachel-Hintergrundbild
+
     private boolean isDropping = false;
     private List<Particle> particles = new ArrayList<>();
 
@@ -36,6 +45,9 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         super(context);
         getHolder().addCallback(this);
         setFocusable(true);
+
+        // Lade das neue Hintergrundbild
+        backgroundBitmap = BitmapFactory.decodeResource(getResources(), R.drawable.bathroom_background);
 
         float baseSize = 150;
         float scaleFactor = 1.25f;
@@ -49,30 +61,40 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
 
         loadHighScore();
 
+        // --- PAINTS FÜR DAS NEUE DESIGN INITIALISIEREN ---
         scorePaint = new Paint();
         scorePaint.setColor(Color.BLACK);
         scorePaint.setTextSize(60);
         scorePaint.setTextAlign(Paint.Align.CENTER);
 
-        toiletPaint = new Paint();
-        toiletPaint.setColor(Color.WHITE);
-        toiletPaint.setStyle(Paint.Style.FILL);
+        scoreBackgroundPaint = new Paint();
+        scoreBackgroundPaint.setColor(Color.parseColor("#F5F5DC")); // Beige, wie eine Kachel
+        scoreBackgroundPaint.setStyle(Paint.Style.FILL);
 
-        toiletContourPaint = new Paint();
-        toiletContourPaint.setColor(Color.GRAY);
-        toiletContourPaint.setStyle(Paint.Style.STROKE);
-        toiletContourPaint.setStrokeWidth(30);
+        toiletBowlPaint = new Paint();
+        toiletBowlPaint.setColor(Color.parseColor("#E0F8FF")); // Helles Blau für Wasser
+        toiletBowlPaint.setStyle(Paint.Style.FILL);
+
+        toiletRimPaint = new Paint();
+        toiletRimPaint.setColor(Color.parseColor("#DCDCDC")); // Helles Grau für Porzellan
+        toiletRimPaint.setStyle(Paint.Style.STROKE);
+        toiletRimPaint.setStrokeWidth(40); // Dickerer Rand
 
         gameThread = new GameThread(getHolder(), this);
     }
 
     @Override
     public void surfaceCreated(SurfaceHolder holder) {
+        // --- CONTAINER ANPASSEN ---
+        // Wir machen den Container etwas breiter und weniger hoch für eine ovalere Form
         int containerWidth = getWidth();
-        int containerHeight = getHeight() * 7 / 10;
+        int containerHeight = getHeight() * 2 / 3; // Macht den Bereich proportional niedriger
         int left = 0;
         int top = getHeight() - containerHeight;
         containerRect = new RectF(left, top, left + containerWidth, top + containerHeight);
+
+        // Hintergrund für die Punkteanzeige definieren
+        scoreBgRect = new RectF(getWidth()/2 - 250, 40, getWidth()/2 + 250, 220);
 
         spawnNewPoop(getWidth() / 2.0f);
         gameThread.setRunning(true);
@@ -96,8 +118,9 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         if (fallingPoop != null && isDropping) {
             fallingPoop.update();
 
-            if (fallingPoop.y + fallingPoop.radius > containerRect.bottom - toiletContourPaint.getStrokeWidth()) {
-                fallingPoop.y = containerRect.bottom - toiletContourPaint.getStrokeWidth() - fallingPoop.radius;
+            // Kollisionsprüfung mit dem Boden der Schüssel
+            if (fallingPoop.y + fallingPoop.radius > containerRect.bottom - toiletRimPaint.getStrokeWidth() / 2) {
+                fallingPoop.y = containerRect.bottom - toiletRimPaint.getStrokeWidth() / 2 - fallingPoop.radius;
                 placeFallingPoop();
                 return;
             }
@@ -117,6 +140,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
             poop.update();
         }
 
+        // Partikel aktualisieren und entfernen, wenn sie "tot" sind
         Iterator<Particle> iterator = particles.iterator();
         while (iterator.hasNext()) {
             Particle p = iterator.next();
@@ -127,15 +151,17 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         }
 
         applyPhysics();
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < 4; i++) { // Kollisionen mehrmals prüfen für Stabilität
             checkCollisionsAndMerge();
         }
     }
 
     private void applyPhysics() {
         for (Poop poop : placedPoops) {
-            float wallThickness = toiletContourPaint.getStrokeWidth() / 2;
+            // Wandstärke für Kollisionsberechnung
+            float wallThickness = toiletRimPaint.getStrokeWidth() / 2;
 
+            // Kollision mit den Seitenwänden
             if (poop.x - poop.radius < containerRect.left + wallThickness) {
                 poop.x = containerRect.left + wallThickness + poop.radius;
                 poop.setVelocityX(Math.abs(poop.getVelocityX()) * 0.5f);
@@ -144,8 +170,9 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
                 poop.x = containerRect.right - wallThickness - poop.radius;
                 poop.setVelocityX(-Math.abs(poop.getVelocityX()) * 0.5f);
             }
-            if (poop.y + poop.radius > containerRect.bottom - toiletContourPaint.getStrokeWidth()) {
-                poop.y = containerRect.bottom - toiletContourPaint.getStrokeWidth() - poop.radius;
+            // Kollision mit dem Boden
+            if (poop.y + poop.radius > containerRect.bottom - wallThickness) {
+                poop.y = containerRect.bottom - wallThickness - poop.radius;
                 poop.setVelocityY(-Math.abs(poop.getVelocityY()) * 0.2f);
                 poop.setAngularVelocity(poop.getAngularVelocity() * 0.9f);
             }
@@ -156,24 +183,31 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
     public void draw(Canvas canvas) {
         super.draw(canvas);
         if (canvas != null) {
-            canvas.drawColor(Color.parseColor("#ADD8E6"));
-            canvas.drawRect(containerRect, toiletPaint);
+            // --- NEUES ZEICHNEN ---
 
-            float wallThickness = toiletContourPaint.getStrokeWidth() / 2;
-            canvas.drawLine(containerRect.left + wallThickness, containerRect.top, containerRect.left + wallThickness, containerRect.bottom - wallThickness, toiletContourPaint);
-            canvas.drawLine(containerRect.left, containerRect.bottom - wallThickness, containerRect.right, containerRect.bottom - wallThickness, toiletContourPaint);
-            canvas.drawLine(containerRect.right - wallThickness, containerRect.top, containerRect.right - wallThickness, containerRect.bottom - wallThickness, toiletContourPaint);
+            // 1. Zeichne den gekachelten Hintergrund
+            canvas.drawBitmap(backgroundBitmap, null, new Rect(0, 0, getWidth(), getHeight()), null);
 
+            // 2. Zeichne die Toilettenschüssel als Oval
+            canvas.drawOval(containerRect, toiletBowlPaint); // Wasser
+            canvas.drawOval(containerRect, toiletRimPaint);   // Rand
+
+            // Zeichne alle platzierten Poops
             for (Poop poop : placedPoops) {
                 poop.draw(canvas);
             }
+            // Zeichne alle Partikel
             for (Particle p : particles) {
                 p.draw(canvas);
             }
+            // Zeichne den fallenden Poop
             if (fallingPoop != null) {
                 fallingPoop.draw(canvas);
             }
-            canvas.drawText("Score: " + score, getWidth() / 2, 100, scorePaint);
+
+            // 3. Zeichne den Hintergrund für die Punkte und dann den Text
+            canvas.drawRoundRect(scoreBgRect, 20, 20, scoreBackgroundPaint);
+            canvas.drawText("Score: " + score, getWidth() / 2, 110, scorePaint);
             canvas.drawText("High: " + highScore, getWidth() / 2, 180, scorePaint);
         }
     }
@@ -201,9 +235,18 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
                         int newType = p1.getType() + 1;
                         float newX = (p1.x + p2.x) / 2;
                         float newY = (p1.y + p2.y) / 2;
+
+                        // --- NEUER PARTIKEL-EFFEKT ---
+                        // Erzeuge braune "Poop"-Partikel
                         for (int k = 0; k < 20; k++) {
-                            particles.add(new Particle(newX, newY));
+                            particles.add(new Particle(newX, newY, Color.parseColor("#8B4513")));
                         }
+                        // Erzeuge blaue und weiße "Wasser"-Partikel für den Splash-Effekt
+                        for (int k = 0; k < 15; k++) {
+                            particles.add(new Particle(newX, newY, Color.WHITE));
+                            particles.add(new Particle(newX, newY, Color.CYAN));
+                        }
+
                         Poop newPoop = new Poop(newType, poopImages[newType], newX, newY);
                         poopsToAdd.add(newPoop);
                         score += (newType + 1) * 100;
@@ -212,6 +255,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
                             saveHighScore();
                         }
                     } else {
+                        // Physik-Kollision
                         float overlap = minDistance - distance;
                         float nx = dx / distance;
                         float ny = dy / distance;
@@ -234,31 +278,6 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
                         p1.setVelocityY(p1.getVelocityY() - impulse / p1.getMass() * ny);
                         p2.setVelocityX(p2.getVelocityX() + impulse / p2.getMass() * nx);
                         p2.setVelocityY(p2.getVelocityY() + impulse / p2.getMass() * ny);
-
-                        // *** NEU: DESTABILISIERUNG FÜR BALANCIERENDE BÄLLE ***
-                        float dxAbs = Math.abs(p1.getX() - p2.getX());
-                        // Prüft, ob sie fast vertikal gestapelt sind und sich kaum bewegen
-                        if (dxAbs < (p1.getRadius() + p2.getRadius()) * 0.1f && Math.abs(velAlongNormal) < 0.5f) {
-                            // Identifiziert den oberen Poop
-                            Poop topPoop = (p1.getY() < p2.getY()) ? p1 : p2;
-                            // Wendet einen kleinen zufälligen horizontalen Stoß an
-                            float push = (random.nextFloat() - 0.5f) * 2f; // Kleiner Stoß zwischen -1 und 1
-                            topPoop.setVelocityX(topPoop.getVelocityX() + push);
-                        }
-
-
-                        if (Math.abs(velAlongNormal) < 1.0f) {
-                            p1.setAngularVelocity(p1.getAngularVelocity() * 0.9f);
-                            p2.setAngularVelocity(p2.getAngularVelocity() * 0.9f);
-                        } else {
-                            float tangentX = -ny;
-                            float tangentY = nx;
-                            float velAlongTangent = relVelX * tangentX + relVelY * tangentY;
-                            float frictionImpulse = -velAlongTangent / (1 / p1.getMass() + 1 / p2.getMass()) * 0.5f;
-
-                            p1.addRotation(-frictionImpulse / p1.getMass());
-                            p2.addRotation(-frictionImpulse / p2.getMass());
-                        }
                     }
                 }
             }
@@ -267,6 +286,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         placedPoops.removeAll(poopsToRemove);
         placedPoops.addAll(poopsToAdd);
     }
+
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
@@ -277,7 +297,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
             case MotionEvent.ACTION_MOVE:
                 if (!isDropping) {
                     fallingPoop.setX(event.getX());
-                    float wallThickness = toiletContourPaint.getStrokeWidth() / 2;
+                    float wallThickness = toiletRimPaint.getStrokeWidth() / 2;
                     if (fallingPoop.getX() - fallingPoop.getRadius() < containerRect.left + wallThickness) {
                         fallingPoop.setX(containerRect.left + wallThickness + fallingPoop.getRadius());
                     }
