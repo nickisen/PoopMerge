@@ -147,8 +147,6 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
             if (poop.y + poop.radius > containerRect.bottom - toiletContourPaint.getStrokeWidth()) {
                 poop.y = containerRect.bottom - toiletContourPaint.getStrokeWidth() - poop.radius;
                 poop.setVelocityY(-Math.abs(poop.getVelocityY()) * 0.2f);
-
-                // *** NEU: STARKE BODENREIBUNG FÜR ROTATION ***
                 poop.setAngularVelocity(poop.getAngularVelocity() * 0.9f);
             }
         }
@@ -237,21 +235,29 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
                         p2.setVelocityX(p2.getVelocityX() + impulse / p2.getMass() * nx);
                         p2.setVelocityY(p2.getVelocityY() + impulse / p2.getMass() * ny);
 
-                        // *** NEU: REIBUNGSDÄMPFUNG BEI KONTAKT ***
-                        // Wenn die Kollisionsgeschwindigkeit niedrig ist, sind die Objekte im Ruhekontakt
+                        // *** NEU: DESTABILISIERUNG FÜR BALANCIERENDE BÄLLE ***
+                        float dxAbs = Math.abs(p1.getX() - p2.getX());
+                        // Prüft, ob sie fast vertikal gestapelt sind und sich kaum bewegen
+                        if (dxAbs < (p1.getRadius() + p2.getRadius()) * 0.1f && Math.abs(velAlongNormal) < 0.5f) {
+                            // Identifiziert den oberen Poop
+                            Poop topPoop = (p1.getY() < p2.getY()) ? p1 : p2;
+                            // Wendet einen kleinen zufälligen horizontalen Stoß an
+                            float push = (random.nextFloat() - 0.5f) * 2f; // Kleiner Stoß zwischen -1 und 1
+                            topPoop.setVelocityX(topPoop.getVelocityX() + push);
+                        }
+
+
                         if (Math.abs(velAlongNormal) < 1.0f) {
-                            // Wende eine starke Dämpfung auf die Rotation an, um sie zur Ruhe zu bringen
                             p1.setAngularVelocity(p1.getAngularVelocity() * 0.9f);
                             p2.setAngularVelocity(p2.getAngularVelocity() * 0.9f);
                         } else {
-                            // Wende bei einer aktiven Kollision Reibung an, die Rotation erzeugt
                             float tangentX = -ny;
                             float tangentY = nx;
                             float velAlongTangent = relVelX * tangentX + relVelY * tangentY;
-                            float frictionImpulse = -velAlongTangent / (1 / p1.getMass() + 1 / p2.getMass()) * 0.1f;
+                            float frictionImpulse = -velAlongTangent / (1 / p1.getMass() + 1 / p2.getMass()) * 0.5f;
 
-                            p1.addRotation(-frictionImpulse / p1.getMass() * 0.5f);
-                            p2.addRotation(-frictionImpulse / p2.getMass() * 0.5f);
+                            p1.addRotation(-frictionImpulse / p1.getMass());
+                            p2.addRotation(-frictionImpulse / p2.getMass());
                         }
                     }
                 }
